@@ -1,8 +1,8 @@
-# Equipe 09 — Conta Pão
+# Grupo 09 — Conta Pão
 
 ## Informações do projeto
 
-- **Equipe:** 09
+- **Grupo:** 09
 - **Projeto:** Conta Pão - Contabilidade para Rede de Padarias
 - **Repositório:** https://github.com/jvmfort/ContaPao
 - **Branch principal:** `main`
