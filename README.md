@@ -1,2 +1,2 @@
-# ContaP-o
+# ContaPao
 Projeto da disciplina de Análise e Projeto de Sistemas
