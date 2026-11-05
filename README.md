@@ -1,4 +1,4 @@
-# Equipe XX — Nome do Projeto
+# Equipe 09 — Conta Pão
 
 ## Informações do projeto
 
