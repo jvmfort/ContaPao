@@ -1,16 +1,19 @@
 package catalogo;
 
-public class Insumo implements ItemReposicao{
+import java.util.Objects;
 
-    private String nome;
-    private double custo;
+public class Insumo implements ItemReposicao {
+    private final String nome;
+    private final double custo;
 
     public Insumo(String nome, double custo) {
-        this.nome = nome;
+        if (custo < 0) throw new IllegalArgumentException("Custo não pode ser negativo.");
+        this.nome = Objects.requireNonNull(nome);
         this.custo = custo;
     }
 
-    public double calcularCusto(){
-        return custo;
-    }
+    public String getNome() { return nome; }
+
+    @Override
+    public double calcularCusto() { return custo; }
 }
