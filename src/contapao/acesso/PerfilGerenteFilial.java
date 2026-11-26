@@ -1,4 +1,4 @@
-package acesso;
+package contapao.acesso;
 
 /** Gerente: registra e consulta apenas a própria padaria (RN02). */
 public class PerfilGerenteFilial implements PerfilAcesso {

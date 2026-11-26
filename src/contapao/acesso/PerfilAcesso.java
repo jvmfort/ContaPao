@@ -1,4 +1,4 @@
-package acesso;
+package contapao.acesso;
 
 
 /** Permissões por perfil, verificadas na camada de serviço (separadas do Observer). */

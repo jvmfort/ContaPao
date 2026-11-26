@@ -2,7 +2,6 @@ package contapao.expedicao;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ class ExpedicaoTest {
     }
 
     @Test
-    @DisplayName("Singleton: getInstance devolve sempre a mesma central")
     void singleton() {
         assertSame(CentralExpedicaoMatriz.getInstance(), CentralExpedicaoMatriz.getInstance());
     }
@@ -39,18 +37,17 @@ class ExpedicaoTest {
     }
 
     @Test
-    @DisplayName("Observer: um observador com defeito não impede os demais de serem avisados")
     void observadorComDefeitoNaoDerrubaOsOutros() {
         List<String> chamadas = new ArrayList<>();
         ObservadorExpedicao defeituoso = new ObservadorExpedicao() {
             @Override
             public void aoEncerrarCiclo(int cicloId) {
-                throw new IllegalStateException("falha proposital");
+                throw new IllegalStateException("falha");
             }
 
             @Override
             public void aoDistribuirCiclo(int cicloId, String insumo, Map<String, Integer> atendimentos) {
-                throw new IllegalStateException("falha proposital");
+                throw new IllegalStateException("falha");
             }
         };
         ObservadorExpedicao saudavel = new ObservadorExpedicao() {
@@ -82,7 +79,16 @@ class ExpedicaoTest {
     }
 
     @Test
-    @DisplayName("GerenteFilial só enxerga a própria padaria")
+    void notificadorPainelCentralRegistraEventos() {
+        NotificadorPainelCentral painel = new NotificadorPainelCentral();
+        painel.aoEncerrarCiclo(3);
+        painel.aoDistribuirCiclo(3, "Farinha", Map.of("Padaria A", 15));
+        assertEquals(2, painel.getHistorico().size());
+        assertTrue(painel.getHistorico().get(0).contains("Ciclo 3 encerrado"));
+        assertTrue(painel.getHistorico().get(1).contains("Padaria A=15"));
+    }
+
+    @Test
     void gerenteSoVeSuaFilial() {
         GerenteFilial gerenteA = new GerenteFilial("Padaria A");
         gerenteA.aoDistribuirCiclo(1, "Farinha", Map.of("Padaria B", 20));
@@ -102,7 +108,26 @@ class ExpedicaoTest {
     }
 
     @Test
-    @DisplayName("StatusCiclo: só ENCERRADO pode distribuir")
+    void notificadorGerenteFilialFiltraEValida() {
+        assertThrows(IllegalArgumentException.class, () -> new NotificadorGerenteFilial(null, "A"));
+        assertThrows(IllegalArgumentException.class, () -> new NotificadorGerenteFilial(" ", "A"));
+        assertThrows(IllegalArgumentException.class, () -> new NotificadorGerenteFilial("Carlos", null));
+        assertThrows(IllegalArgumentException.class, () -> new NotificadorGerenteFilial("Carlos", "D"));
+
+        NotificadorGerenteFilial notifA = new NotificadorGerenteFilial("Carlos", "A");
+        assertEquals("Carlos", notifA.getNomeGerente());
+        assertEquals("A", notifA.getCodigoPadaria());
+
+        notifA.aoDistribuirCiclo(1, "Farinha", Map.of("Padaria B", 20));
+        assertTrue(notifA.getMensagens().isEmpty());
+
+        notifA.aoDistribuirCiclo(1, "Farinha", Map.of("Padaria A", 25, "Padaria B", 20));
+        notifA.aoEncerrarCiclo(2);
+        assertEquals(2, notifA.getMensagens().size());
+        assertTrue(notifA.getMensagens().get(0).contains("Padaria A recebeu 25"));
+    }
+
+    @Test
     void statusCiclo() {
         assertFalse(StatusCiclo.ABERTO.podeDistribuir());
         assertTrue(StatusCiclo.ENCERRADO.podeDistribuir());

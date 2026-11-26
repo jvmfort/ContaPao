@@ -1,4 +1,4 @@
-package acesso;
+package contapao.acesso;
 
 /** Contador: gerencia o ciclo, consolida e confirma; não registra solicitação. */
 public class PerfilContadorCentral implements PerfilAcesso {

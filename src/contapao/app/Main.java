@@ -1,12 +1,13 @@
-
 package contapao.app;
 
+import contapao.acesso.PerfilAcesso;
+import contapao.acesso.PerfilContadorCentral;
+import contapao.acesso.PerfilGerenteFilial;
 import contapao.catalogo.Insumo;
 import contapao.catalogo.KitReposicao;
 import contapao.expedicao.CentralExpedicaoMatriz;
-import contapao.expedicao.GerenteFilial;
-import contapao.expedicao.PainelExpedicaoCentral;
-import contapao.fachada.PerfilAcesso;
+import contapao.expedicao.NotificadorGerenteFilial;
+import contapao.expedicao.NotificadorPainelCentral;
 import contapao.fachada.ReposicaoPadariaFacade;
 import contapao.frete.FrotaPropriaFactory;
 import contapao.integracao.AlertaSireneReal;
@@ -26,10 +27,13 @@ public class Main {
         repositorio.inicializarBanco();
         repositorio.resetarDadosDemonstracao();
 
-        PainelExpedicaoCentral painel = new PainelExpedicaoCentral();
-        GerenteFilial gerenteA = new GerenteFilial("Padaria A");
+        NotificadorPainelCentral painel = new NotificadorPainelCentral();
+        NotificadorGerenteFilial gerenteA = new NotificadorGerenteFilial("Carlos", "A");
         CentralExpedicaoMatriz.getInstance().registrar(painel);
         CentralExpedicaoMatriz.getInstance().registrar(gerenteA);
+
+        PerfilAcesso contador = new PerfilContadorCentral("Ana");
+        PerfilAcesso perfilGerenteA = new PerfilGerenteFilial("Carlos", "A");
 
         ReposicaoPadariaFacade fachada = new ReposicaoPadariaFacade(repositorio, new RateioProporcional());
         fachada.setAlertaSonoro(new AlertaSireneReal());
@@ -45,13 +49,13 @@ public class Main {
 
         System.out.println("Estoque inicial: " + repositorio.consultarSaldoCentral(FARINHA));
         try {
-            fachada.confirmarDistribuicao(PerfilAcesso.GERENTE, 1, FARINHA, demandas);
+            fachada.confirmarDistribuicao(perfilGerenteA, 1, FARINHA, demandas);
         } catch (SecurityException e) {
             System.out.println("RN01 -> " + e.getMessage());
         }
 
         Map<String, Integer> resultado = fachada.confirmarDistribuicaoEExpedir(
-                PerfilAcesso.CONTADOR, 1, FARINHA, kit, new FrotaPropriaFactory(), demandas);
+                contador, 1, FARINHA, kit, new FrotaPropriaFactory(), demandas);
         System.out.println("Distribuição (proporcional): " + resultado);
         System.out.println("Estoque final: " + repositorio.consultarSaldoCentral(FARINHA));
 
@@ -59,7 +63,7 @@ public class Main {
 
         fachada.trocarPolitica(new RateioPorPrioridade());
         try {
-            fachada.confirmarDistribuicao(PerfilAcesso.CONTADOR, 1, FARINHA, demandas);
+            fachada.confirmarDistribuicao(contador, 1, FARINHA, demandas);
         } catch (IllegalStateException e) {
             System.out.println("\nRN05 -> " + e.getMessage());
         }

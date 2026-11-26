@@ -1,5 +1,6 @@
 package contapao.fachada;
 
+import contapao.acesso.PerfilAcesso;
 import contapao.catalogo.ItemReposicao;
 import contapao.expedicao.CentralExpedicaoMatriz;
 import contapao.frete.FreteFactory;
@@ -67,20 +68,20 @@ public class ReposicaoPadariaFacade {
         return guiaService;
     }
 
-    public void abrirCiclo(int cicloId) {
+    public void abrirCiclo(PerfilAcesso perfil, int cicloId) {
+        exigirPerfil(perfil).exigirGerenciarCiclo();
         repositorio.criarCiclo(cicloId);
     }
 
-    public void encerrarCiclo(int cicloId) {
+    public void encerrarCiclo(PerfilAcesso perfil, int cicloId) {
+        exigirPerfil(perfil).exigirGerenciarCiclo();
         repositorio.encerrarCiclo(cicloId);
         central.notificarEncerramento(cicloId);
     }
 
     public Map<String, Integer> confirmarDistribuicao(PerfilAcesso perfil, int cicloId, String insumo,
                                                       Map<String, Integer> demandasPorUnidade) {
-        if (perfil != PerfilAcesso.CONTADOR) {
-            throw new SecurityException("Acesso negado: apenas o CONTADOR pode confirmar distribuições.");
-        }
+        exigirPerfil(perfil).exigirConfirmarDistribuicao();
         Map<String, Integer> distribuicao = distribuicaoService.confirmar(cicloId, insumo, demandasPorUnidade);
         central.notificarDistribuicao(cicloId, insumo, distribuicao);
         return distribuicao;
@@ -132,6 +133,13 @@ public class ReposicaoPadariaFacade {
 
         emitirExpedicao(codigoFilial, nomeInsumo, qtdAtendida, custoTotal);
         return true;
+    }
+
+    private PerfilAcesso exigirPerfil(PerfilAcesso perfil) {
+        if (perfil == null) {
+            throw new SecurityException("Perfil de acesso não informado.");
+        }
+        return perfil;
     }
 
     private double calcularCustoTotal(ItemReposicao item, int quantidade, FreteFactory freteFactory) {

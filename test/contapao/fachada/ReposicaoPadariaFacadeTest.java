@@ -1,5 +1,8 @@
 package contapao.fachada;
 
+import contapao.acesso.PerfilAcesso;
+import contapao.acesso.PerfilContadorCentral;
+import contapao.acesso.PerfilGerenteFilial;
 import contapao.catalogo.Insumo;
 import contapao.catalogo.KitReposicao;
 import contapao.expedicao.CentralExpedicaoMatriz;
@@ -20,7 +23,6 @@ import contapao.servico.FinanceiroInternoService;
 import contapao.servico.GuiaRemessaService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -43,18 +45,22 @@ class ReposicaoPadariaFacadeTest {
     private FinanceiroInternoService financeiro;
     private GuiaRemessaService guias;
     private ReposicaoPadariaFacade fachada;
+    private PerfilAcesso contador;
+    private PerfilAcesso gerenteA;
 
     @BeforeEach
     void setUp() {
         CentralExpedicaoMatriz.getInstance().limparObservadores();
         repositorio = new RepositorioReposicaoSQLite(pasta.resolve("teste.db").toString());
         repositorio.inicializarBanco();
-        repositorio.resetarDadosDemonstracao(); // Farinha 100, ciclo 1 ENCERRADO
+        repositorio.resetarDadosDemonstracao();
         repositorio.cadastrarEstoque("Fermento Biologico Seco", 200);
         repositorio.cadastrarEstoque("Acucar Cristal", 300);
         financeiro = new FinanceiroInternoService();
         guias = new GuiaRemessaService();
         fachada = new ReposicaoPadariaFacade(repositorio, new RateioProporcional(), financeiro, guias, null);
+        contador = new PerfilContadorCentral("Ana");
+        gerenteA = new PerfilGerenteFilial("Carlos", "A");
     }
 
     @AfterEach
@@ -70,8 +76,6 @@ class ReposicaoPadariaFacadeTest {
         return m;
     }
 
-    // ------------------------------------------------------------------ construção
-
     @Test
     void construtoresRejeitamNulos() {
         assertThrows(NullPointerException.class, () -> new ReposicaoPadariaFacade(null, new RateioProporcional()));
@@ -83,7 +87,6 @@ class ReposicaoPadariaFacadeTest {
     }
 
     @Test
-    @DisplayName("Construtor simples cria serviços padrão e AlertaSonoroNulo")
     void construtorSimples() {
         ReposicaoPadariaFacade f = new ReposicaoPadariaFacade(repositorio, new RateioProporcional());
         assertNotNull(f.getFinanceiroService());
@@ -93,7 +96,6 @@ class ReposicaoPadariaFacadeTest {
     }
 
     @Test
-    @DisplayName("setAlertaSonoro(null) volta para AlertaSonoroNulo")
     void alertaNuloVoltaParaNullObject() {
         fachada.setAlertaSonoro(msg -> { });
         fachada.setAlertaSonoro(null);
@@ -105,93 +107,84 @@ class ReposicaoPadariaFacadeTest {
         assertThrows(NullPointerException.class, () -> fachada.trocarPolitica(null));
     }
 
-    // ---------------------------------------------------- confirmarDistribuicao (RN01)
-
     @Test
-    @DisplayName("RN01: GERENTE não confirma distribuição e nada é gravado")
     void gerenteBloqueado() {
         assertThrows(SecurityException.class, () ->
-                fachada.confirmarDistribuicao(PerfilAcesso.GERENTE, 1, FARINHA, demandas(20, 20, 20)));
+                fachada.confirmarDistribuicao(gerenteA, 1, FARINHA, demandas(20, 20, 20)));
+        assertThrows(SecurityException.class, () -> fachada.abrirCiclo(gerenteA, 10));
+        assertThrows(SecurityException.class, () -> fachada.encerrarCiclo(gerenteA, 1));
         assertEquals(100, repositorio.consultarSaldoCentral(FARINHA));
         assertEquals(StatusCiclo.ENCERRADO, repositorio.consultarEstadoCiclo(1));
     }
 
     @Test
-    @DisplayName("Perfil nulo também é bloqueado")
     void perfilNuloBloqueado() {
         assertThrows(SecurityException.class, () ->
                 fachada.confirmarDistribuicao(null, 1, FARINHA, demandas(20, 20, 20)));
+        assertThrows(SecurityException.class, () -> fachada.abrirCiclo(null, 10));
+        assertThrows(SecurityException.class, () -> fachada.encerrarCiclo(null, 1));
     }
 
     @Test
-    @DisplayName("CONTADOR distribui, o banco reflete e a política pode ser trocada em tempo de execução")
     void contadorDistribui() {
-        Map<String, Integer> r = fachada.confirmarDistribuicao(PerfilAcesso.CONTADOR, 1, FARINHA, demandas(70, 40, 40));
+        Map<String, Integer> r = fachada.confirmarDistribuicao(contador, 1, FARINHA, demandas(70, 40, 40));
         assertEquals(Map.of("Padaria A", 48, "Padaria B", 26, "Padaria C", 26), r);
         assertEquals(0, repositorio.consultarSaldoCentral(FARINHA));
         assertEquals(StatusCiclo.DISTRIBUIDO, repositorio.consultarEstadoCiclo(1));
 
-        fachada.abrirCiclo(2);
-        fachada.encerrarCiclo(2);
+        fachada.abrirCiclo(contador, 2);
+        fachada.encerrarCiclo(contador, 2);
         repositorio.cadastrarEstoque(FARINHA, 100);
         fachada.trocarPolitica(new RateioPorPrioridade());
-        Map<String, Integer> r2 = fachada.confirmarDistribuicao(PerfilAcesso.CONTADOR, 2, FARINHA, demandas(60, 50, 30));
+        Map<String, Integer> r2 = fachada.confirmarDistribuicao(contador, 2, FARINHA, demandas(60, 50, 30));
         assertEquals(Map.of("Padaria A", 60, "Padaria B", 40, "Padaria C", 0), r2);
     }
 
     @Test
-    @DisplayName("Persistência real: nova instância do repositório enxerga a distribuição")
     void persistenciaReal() {
-        fachada.confirmarDistribuicao(PerfilAcesso.CONTADOR, 1, FARINHA, demandas(30, 30, 20));
+        fachada.confirmarDistribuicao(contador, 1, FARINHA, demandas(30, 30, 20));
         RepositorioReposicaoSQLite novo = new RepositorioReposicaoSQLite(pasta.resolve("teste.db").toString());
         assertEquals(20, novo.consultarSaldoCentral(FARINHA));
         assertEquals(StatusCiclo.DISTRIBUIDO, novo.consultarEstadoCiclo(1));
         assertEquals(30, novo.consultarAtendimentos(1, FARINHA).get("Padaria A"));
     }
 
-    // ------------------------------------------------------ ciclo e observadores
-
     @Test
-    @DisplayName("Observer: painel e gerente são avisados no encerramento e na distribuição")
     void observadoresSaoNotificados() {
         PainelExpedicaoCentral painel = new PainelExpedicaoCentral();
-        GerenteFilial gerenteB = new GerenteFilial("Padaria B");
+        GerenteFilial gerenteFilialB = new GerenteFilial("Padaria B");
         CentralExpedicaoMatriz.getInstance().registrar(painel);
-        CentralExpedicaoMatriz.getInstance().registrar(gerenteB);
+        CentralExpedicaoMatriz.getInstance().registrar(gerenteFilialB);
 
-        fachada.abrirCiclo(2);
-        fachada.encerrarCiclo(2);
-        fachada.confirmarDistribuicao(PerfilAcesso.CONTADOR, 1, FARINHA, demandas(70, 40, 40));
+        fachada.abrirCiclo(contador, 2);
+        fachada.encerrarCiclo(contador, 2);
+        fachada.confirmarDistribuicao(contador, 1, FARINHA, demandas(70, 40, 40));
 
         assertEquals(2, painel.getHistorico().size());
         assertTrue(painel.getHistorico().get(0).contains("Ciclo 2 encerrado"));
         assertTrue(painel.getHistorico().get(1).contains("Ciclo 1 distribuído"));
-        assertEquals(2, gerenteB.getMensagens().size());
-        assertTrue(gerenteB.getMensagens().get(1).contains("Padaria B recebeu 26"));
+        assertEquals(2, gerenteFilialB.getMensagens().size());
+        assertTrue(gerenteFilialB.getMensagens().get(1).contains("Padaria B recebeu 26"));
     }
 
     @Test
-    @DisplayName("Distribuição recusada não notifica ninguém")
     void recusaNaoNotifica() {
         PainelExpedicaoCentral painel = new PainelExpedicaoCentral();
         CentralExpedicaoMatriz.getInstance().registrar(painel);
         assertThrows(SecurityException.class, () ->
-                fachada.confirmarDistribuicao(PerfilAcesso.GERENTE, 1, FARINHA, demandas(10, 10, 10)));
+                fachada.confirmarDistribuicao(gerenteA, 1, FARINHA, demandas(10, 10, 10)));
         assertTrue(painel.getHistorico().isEmpty());
     }
 
     @Test
     void encerrarCicloInvalidoLancaErro() {
-        assertThrows(IllegalStateException.class, () -> fachada.encerrarCiclo(1)); // já ENCERRADO
-        assertThrows(IllegalArgumentException.class, () -> fachada.encerrarCiclo(999));
-        fachada.abrirCiclo(5);
-        assertThrows(IllegalArgumentException.class, () -> fachada.abrirCiclo(5)); // duplicado
+        assertThrows(IllegalStateException.class, () -> fachada.encerrarCiclo(contador, 1));
+        assertThrows(IllegalArgumentException.class, () -> fachada.encerrarCiclo(contador, 999));
+        fachada.abrirCiclo(contador, 5);
+        assertThrows(IllegalArgumentException.class, () -> fachada.abrirCiclo(contador, 5));
     }
 
-    // ------------------------------------------------- confirmarDistribuicaoEExpedir
-
     @Test
-    @DisplayName("Distribui e expede: alerta, débito e guia por padaria atendida; padaria com zero é ignorada")
     void distribuiEExpede() {
         List<String> alertas = new ArrayList<>();
         fachada.setAlertaSonoro(alertas::add);
@@ -199,35 +192,33 @@ class ReposicaoPadariaFacadeTest {
 
         KitReposicao kit = new KitReposicao("Kit");
         kit.adicionar(new Insumo("Farinha", 4.0));
-        kit.adicionar(new Insumo("Fermento", 1.0)); // R$ 5,00 por unidade
+        kit.adicionar(new Insumo("Fermento", 1.0));
 
         Map<String, Integer> r = fachada.confirmarDistribuicaoEExpedir(
-                PerfilAcesso.CONTADOR, 1, FARINHA, kit, new FrotaPropriaFactory(), demandas(60, 50, 30));
+                contador, 1, FARINHA, kit, new FrotaPropriaFactory(), demandas(60, 50, 30));
 
         assertEquals(Map.of("Padaria A", 60, "Padaria B", 40, "Padaria C", 0), r);
-        assertEquals(2, alertas.size());              // C ficou com 0: nada a expedir
+        assertEquals(2, alertas.size());
         assertEquals(2, guias.getGuiasEmitidas().size());
         assertEquals(60 * 5.0 + 15.0, financeiro.totalDebitado("Padaria A"), 0.0001);
         assertEquals(40 * 5.0 + 15.0, financeiro.totalDebitado("Padaria B"), 0.0001);
         assertEquals(0.0, financeiro.totalDebitado("Padaria C"), 0.0001);
-        assertEquals(0, repositorio.consultarSaldoCentral(FARINHA)); // baixado uma única vez, pela distribuição
+        assertEquals(0, repositorio.consultarSaldoCentral(FARINHA));
     }
 
     @Test
-    @DisplayName("Distribui e expede: GERENTE bloqueado e argumentos nulos rejeitados antes de gravar")
     void distribuiEExpedeValidacoes() {
         Insumo item = new Insumo("Farinha", 1.0);
         assertThrows(SecurityException.class, () -> fachada.confirmarDistribuicaoEExpedir(
-                PerfilAcesso.GERENTE, 1, FARINHA, item, new FrotaPropriaFactory(), demandas(10, 10, 10)));
+                gerenteA, 1, FARINHA, item, new FrotaPropriaFactory(), demandas(10, 10, 10)));
         assertThrows(NullPointerException.class, () -> fachada.confirmarDistribuicaoEExpedir(
-                PerfilAcesso.CONTADOR, 1, FARINHA, null, new FrotaPropriaFactory(), demandas(10, 10, 10)));
+                contador, 1, FARINHA, null, new FrotaPropriaFactory(), demandas(10, 10, 10)));
         assertThrows(NullPointerException.class, () -> fachada.confirmarDistribuicaoEExpedir(
-                PerfilAcesso.CONTADOR, 1, FARINHA, item, null, demandas(10, 10, 10)));
+                contador, 1, FARINHA, item, null, demandas(10, 10, 10)));
         assertEquals(StatusCiclo.ENCERRADO, repositorio.consultarEstadoCiclo(1));
     }
 
     @Test
-    @DisplayName("Distribui e expede: débito recusado depois da distribuição lança IllegalStateException")
     void distribuiEExpedeDebitoRecusado() {
         FreteFactory freteNegativo = new FreteFactory() {
             @Override
@@ -236,13 +227,10 @@ class ReposicaoPadariaFacadeTest {
             }
         };
         assertThrows(IllegalStateException.class, () -> fachada.confirmarDistribuicaoEExpedir(
-                PerfilAcesso.CONTADOR, 1, FARINHA, new Insumo("Farinha", 1.0), freteNegativo, demandas(10, 10, 10)));
+                contador, 1, FARINHA, new Insumo("Farinha", 1.0), freteNegativo, demandas(10, 10, 10)));
     }
 
-    // --------------------------------------------------- processarReposicao (RF05)
-
     @Test
-    @DisplayName("Reposição avulsa com sucesso: baixa estoque, debita, emite alerta e guia")
     void reposicaoComSucesso() {
         List<String> alertas = new ArrayList<>();
         AlertaSonoro espiao = alertas::add;
@@ -260,7 +248,6 @@ class ReposicaoPadariaFacadeTest {
     }
 
     @Test
-    @DisplayName("Reposição avulsa com kit e com as três modalidades de frete")
     void reposicaoComKitEFretes() {
         KitReposicao kit = new KitReposicao("Kit Padaria");
         kit.adicionar(new Insumo("Fermento", 30.0));
@@ -276,21 +263,18 @@ class ReposicaoPadariaFacadeTest {
     }
 
     @Test
-    @DisplayName("RN03: atendido maior que solicitado é recusado sem baixar estoque")
     void reposicaoAtendidoMaiorQueSolicitado() {
         assertFalse(fachada.processarReposicao("PAD-A", FARINHA, 10, 15, new Insumo("F", 1.0), new RetiradaMatrizFactory()));
         assertEquals(100, repositorio.consultarSaldoCentral(FARINHA));
     }
 
     @Test
-    @DisplayName("RN03: saldo insuficiente é recusado sem baixar estoque")
     void reposicaoSaldoInsuficiente() {
         assertFalse(fachada.processarReposicao("PAD-A", FARINHA, 600, 600, new Insumo("F", 1.0), new RetiradaMatrizFactory()));
         assertEquals(100, repositorio.consultarSaldoCentral(FARINHA));
     }
 
     @Test
-    @DisplayName("Quantidades zero ou negativas são recusadas")
     void reposicaoQuantidadesInvalidas() {
         Insumo f = new Insumo("F", 1.0);
         assertFalse(fachada.processarReposicao("PAD-A", FARINHA, 0, 10, f, new RetiradaMatrizFactory()));
@@ -300,7 +284,6 @@ class ReposicaoPadariaFacadeTest {
     }
 
     @Test
-    @DisplayName("Débito recusado devolve o estoque que tinha sido baixado")
     void reposicaoDebitoRecusadoDevolveEstoque() {
         FreteFactory freteNegativo = new FreteFactory() {
             @Override
@@ -324,11 +307,10 @@ class ReposicaoPadariaFacadeTest {
     }
 
     @Test
-    @DisplayName("Estoque único: reposição avulsa e distribuição de ciclo enxergam o mesmo saldo")
     void estoqueUnico() {
         assertTrue(fachada.processarReposicao("PAD-A", FARINHA, 30, 30, new Insumo("F", 1.0), new RetiradaMatrizFactory()));
-        Map<String, Integer> r = fachada.confirmarDistribuicao(PerfilAcesso.CONTADOR, 1, FARINHA, demandas(50, 50, 50));
-        assertEquals(70, r.values().stream().mapToInt(Integer::intValue).sum()); // só havia 70 depois da reposição
+        Map<String, Integer> r = fachada.confirmarDistribuicao(contador, 1, FARINHA, demandas(50, 50, 50));
+        assertEquals(70, r.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(0, repositorio.consultarSaldoCentral(FARINHA));
     }
 }
